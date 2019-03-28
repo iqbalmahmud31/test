@@ -1,0 +1,95 @@
+DECLARE @DBName varchar(255)
+declare @DBFileName varchar(256) 
+DECLARE @DATABASES_Fetch int
+declare @chkdirectory as nvarchar(4000)
+declare @folder_exists as int
+Declare @Dir table( subdir  varchar(25),
+                Depth  int)
+Declare @SubDir varchar(25)
+insert  into @Dir(subdir, Depth )
+EXEC master..xp_dirtree '\\192.168.1.*\db'
+
+Select @SubDir=max(subdir)  from @Dir as t
+set @chkdirectory = '\\192.168.1.*\db'+'\'+CONVERT(VARCHAR, GETDATE(), 112)+'\'
+print @SubDir
+if @SubDir is not null and dateadd(day, 7, CONVERT(datetime, @subdir, 102))>=getdate()
+begin
+        DECLARE DATABASES_CURSOR CURSOR FOR
+            select
+                DATABASE_NAME   = db_name(s_mf.database_id)
+            from
+                sys.master_files s_mf
+            where
+               -- ONLINE
+                s_mf.state = 0
+
+               -- Only look at databases to which we have access
+            and has_dbaccess(db_name(s_mf.database_id)) = 1
+
+                -- Not master, tempdb or model
+            and db_name(s_mf.database_id) not in ('Master','tempdb','model')
+            group by s_mf.database_id
+            order by 1
+
+        OPEN DATABASES_CURSOR
+
+        FETCH NEXT FROM DATABASES_CURSOR INTO @DBName
+
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            --declare @DBFileName varchar(256)   
+            set @DBFileName = @DBName + '-'+CONVERT(VARCHAR, GETDATE(), 112)
+            --Select @DBFileName
+
+            exec ('BACKUP DATABASE [' + @DBName + '] TO  DISK = N'''+@chkdirectory+ '' +
+                @DBFileName + ''' WITH NOFORMAT, NOINIT,  NAME = N''' +
+                @DBName + '-Full Database Backup'', SKIP, NOREWIND, NOUNLOAD,  STATS = 100')
+
+            FETCH NEXT FROM DATABASES_CURSOR INTO @DBName
+        END
+
+        CLOSE DATABASES_CURSOR
+        DEALLOCATE DATABASES_CURSOR
+        print 'with in 7 days'
+end
+else
+begin
+    EXECUTE master.dbo.xp_create_subdir @chkdirectory
+    DECLARE DATABASES_CURSOR CURSOR FOR
+            select
+                DATABASE_NAME   = db_name(s_mf.database_id)
+            from
+                sys.master_files s_mf
+            where
+               -- ONLINE
+                s_mf.state = 0
+
+               -- Only look at databases to which we have access
+            and has_dbaccess(db_name(s_mf.database_id)) = 1
+
+                -- Not master, tempdb or model
+            and db_name(s_mf.database_id) not in ('Master','tempdb','model')
+            group by s_mf.database_id
+            order by 1
+
+        OPEN DATABASES_CURSOR
+
+        FETCH NEXT FROM DATABASES_CURSOR INTO @DBName
+
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            --declare @DBFileName varchar(256)   
+            set @DBFileName = @DBName + '-'+CONVERT(VARCHAR, GETDATE(), 112)
+            --Select @DBFileName
+
+            exec ('BACKUP DATABASE [' + @DBName + '] TO  DISK = N'''+@chkdirectory+ '' +
+                @DBFileName + ''' WITH NOFORMAT, NOINIT,  NAME = N''' +
+                @DBName + '-Full Database Backup'', SKIP, NOREWIND, NOUNLOAD,  STATS = 100')
+
+            FETCH NEXT FROM DATABASES_CURSOR INTO @DBName
+        END
+
+        CLOSE DATABASES_CURSOR
+        DEALLOCATE DATABASES_CURSOR
+    print 'more in 7 days'
+end
